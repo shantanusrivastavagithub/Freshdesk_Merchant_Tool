@@ -2,6 +2,19 @@
 
 A read-only Freshdesk MCP connector for Razorpay Agent Studio. It gives an agent safe, read-only access to ticket, contact, and conversation data without allowing writes or destructive actions.
 
+```mermaid
+flowchart LR
+    A[User / Agent Request] --> B[Connector validates input]
+    B --> C{Safe read-only action?}
+    C -->|Yes| D[FreshdeskClient builds authenticated HTTP request]
+    C -->|No| E[Reject with validation error]
+    D --> F[Rate limiter checks retry window]
+    F --> G[Freshdesk API responds]
+    G --> H[Service normalizes data]
+    H --> I[MCP tool returns filtered result]
+    I --> J[Agent receives ticket/contact/conversation response]
+```
+
 ## What this project does
 
 The connector exposes a small, controlled API surface for Freshdesk:
@@ -105,6 +118,39 @@ python scripts/mcp_client_demo.py
 ```
 
 This connects to the local HTTP MCP endpoint and lists available tools before calling `search_freshdesk_tickets`.
+
+## Example MCP usage
+
+The connector exposes read-only tools such as:
+
+- `check_freshdesk_connection`
+- `list_freshdesk_tickets`
+- `search_freshdesk_tickets`
+- `get_freshdesk_ticket`
+- `get_freshdesk_ticket_conversations`
+- `get_freshdesk_contact`
+
+A typical flow looks like this:
+
+```python
+from mcp import ClientSession
+from mcp.client.streamable_http import streamablehttp_client
+
+async def main():
+    async with streamablehttp_client("http://127.0.0.1:8000/mcp") as (read, write, _):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            tools = await session.list_tools()
+            print([tool.name for tool in tools.tools])
+
+            result = await session.call_tool(
+                "search_freshdesk_tickets",
+                {"status": "open", "priority": "high", "page": 1},
+            )
+            print(result)
+```
+
+This pattern is the same one used by the demo script in `scripts/mcp_client_demo.py` and is designed to keep calls restricted to safe, read-only Freshdesk operations.
 
 ## Validation
 
